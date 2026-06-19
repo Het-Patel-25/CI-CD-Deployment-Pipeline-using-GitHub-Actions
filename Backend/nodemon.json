@@ -1,0 +1,6 @@
+{
+  "delay": "2000ms",
+  "ignore": ["node_modules/**"],
+  "ext": "js,json",
+  "exec": "node server.js"
+}

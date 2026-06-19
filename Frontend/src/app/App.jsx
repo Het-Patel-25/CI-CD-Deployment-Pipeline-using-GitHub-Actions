@@ -1,0 +1,140 @@
+import "./App.css"
+import  {Editor} from "@monaco-editor/react"
+import {MonacoBinding} from "y-monaco"
+import { useRef,useMemo,useState,useEffect } from "react"
+import * as Y from "yjs"
+import {SocketIOProvider} from "y-socket.io"
+
+function App() {
+
+  const ydoc=useMemo(()=> new Y.Doc(), [])
+  const yText = useMemo(()=>ydoc.getText("monaco"),[ydoc])
+
+  const editorRef=useRef(null)
+  const [username,setUsername]=useState(()=>{
+    return new URLSearchParams(window.location.search).get("username")||""
+  })
+
+  const [users,setUsers]=useState([])
+  const [inputUsername, setInputUsername] = useState("")
+  const [editorReady, setEditorReady] = useState(false)
+
+  const handleMount = (editor) => {
+    editorRef.current = editor
+    setEditorReady(true)
+  }
+
+
+  useEffect(()=>{
+    if(username && editorReady){
+       const provider = new SocketIOProvider("/", "monaco", ydoc, {
+      autoConnect: true,
+    })
+
+    provider.awareness.setLocalStateField('user',{username})
+
+    const states=Array.from(provider.awareness.getStates().values())
+
+    console.log(states)
+    setUsers(states.filter(state=>state.user && state.user.username).map(state=>state.user))
+
+    provider.awareness.on("change",() =>{
+      const states = Array.from(provider.awareness.getStates().values())
+      setUsers(states.filter(state => state.user && state.user.username).map(state => state.user))
+
+     })
+
+     function handleBeforeUnload(){
+      provider.awareness.setLocalStateField("user",null)
+     }
+
+     window.addEventListener("beforeunload",handleBeforeUnload)
+
+
+    const monacoBinding = new MonacoBinding(
+      yText,
+      editorRef.current.getModel(),
+      new Set([editorRef.current]),
+      provider.awareness
+    )
+    return () =>{
+      monacoBinding.destroy()
+      provider.disconnect()
+      window.removeEventListener("beforeunload",handleBeforeUnload)
+    }
+    }
+  },[
+    username, editorReady, ydoc, yText
+  ])
+
+
+
+  const handleJoin = (e) =>{
+    e.preventDefault()
+    setUsername(inputUsername)
+    window.history.pushState({},"","username="+inputUsername)
+
+  }
+
+  if(!username){
+    return(
+      <main className="h-screen w-full bg-gray-950 flex gap-4 p-4 items-center justify-center"
+>
+  
+  <form 
+  onSubmit={handleJoin}
+  className="flex flex-col gap-4">
+    <input
+      type="text"
+      placeholder="Enter your username"
+      className="p-2 rounded-lg bg-gray-800 text-white"
+      value={inputUsername}
+      name="username"
+      onChange={(e) => setInputUsername(e.target.value)}
+    />
+    <button
+      className="p-2 rounded-lg bg-amber-50 text-gray-950 font-bold"
+      
+
+  >
+    Join
+    </button>
+    </form>
+      
+    </main>
+    )
+  }
+  return (
+   <main
+   className="h-screen w-full bg-gray-950 flex gap-4 p-4"
+
+   >
+    <aside
+      className="h-full w-1/4 bg-amber-50 rounded-lg"
+    >
+      <h2 className="text-2xl font-bold p-4 border-b border-gray-300">Users</h2>
+      <ul className="p-4">
+        {users.map((user,index)=>(
+          <li key={index} className="p-2 bg-gray-800 text-white rounded mb-2">{user.username}</li>
+        ))}
+      </ul> 
+    </aside>
+    <section
+    
+    className="w-3/4 bg-neutral-800 rounded-lg">
+    
+      <Editor
+        height="100%" defaultLanguage="javascript"
+        defaultValue="//some comment"
+        
+        theme="vs-dark" 
+        onMount={handleMount}
+
+      />
+    
+    </section>
+   </main>
+  )
+}
+
+export default App
